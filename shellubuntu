@@ -1,0 +1,92 @@
+#!/bin/bash
+# ============================================
+# SCRIPT DE INSTALACIÓN AUTOMÁTICA DE WORDPRESS
+# Servidor LAMP + WordPress + Usuarios equipo07
+# ============================================
+
+# --- Actualización del sistema ---
+echo "🔄 Actualizando el sistema..."
+sudo apt update -y && sudo apt upgrade -y
+
+# --- Instalación de Apache ---
+echo "🌐 Instalando Apache..."
+sudo apt install apache2 -y
+sudo systemctl enable apache2
+sudo systemctl start apache2
+
+# --- Instalación de MySQL ---
+echo "💾 Instalando MySQL..."
+sudo apt install mysql-server -y
+sudo systemctl enable mysql
+sudo systemctl start mysql
+
+# --- Configuración de base de datos para WordPress ---
+echo "🧱 Configurando base de datos de WordPress..."
+sudo mysql -e "CREATE DATABASE wordpress_db;"
+sudo mysql -e "CREATE USER 'wpuser'@'localhost' IDENTIFIED BY '12345';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON wordpress_db.* TO 'wpuser'@'localhost';"
+sudo mysql -e "FLUSH PRIVILEGES;"
+
+# --- Instalación de PHP y extensiones necesarias ---
+echo "⚙️ Instalando PHP y módulos..."
+sudo apt install php libapache2-mod-php php-mysql php-curl php-gd php-xml php-mbstring php-zip php-intl -y
+sudo systemctl restart apache2
+
+# --- Creación de grupo y usuarios ---
+echo "👥 Creando grupo y usuarios del proyecto..."
+sudo groupadd equipo07
+for user in diego wingston jherald carlos
+do
+  sudo adduser --disabled-password --gecos "" $user
+  echo "$user:12345" | sudo chpasswd
+  sudo usermod -aG equipo07 $user
+done
+
+# --- Descarga e instalación de WordPress ---
+echo "⬇️ Descargando WordPress..."
+cd /tmp
+wget https://wordpress.org/latest.tar.gz
+tar -xvzf latest.tar.gz
+sudo mv wordpress /var/www/html/
+
+# --- Permisos de WordPress ---
+echo "🔐 Configurando permisos..."
+sudo chown -R www-data:equipo07 /var/www/html/wordpress
+sudo chmod -R 775 /var/www/html/wordpress
+
+# --- Configuración del sitio Apache ---
+echo "🧩 Configurando Apache para WordPress..."
+cat <<EOF | sudo tee /etc/apache2/sites-available/wordpress.conf
+<VirtualHost *:80>
+    ServerAdmin admin@localhost
+    DocumentRoot /var/www/html/wordpress
+    ServerName wordpress.local
+    <Directory /var/www/html/wordpress/>
+        AllowOverride All
+        Require all granted
+    </Directory>
+    ErrorLog \${APACHE_LOG_DIR}/error.log
+    CustomLog \${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+EOF
+
+sudo a2ensite wordpress.conf
+sudo a2enmod rewrite
+sudo systemctl restart apache2
+
+# --- Firewall ---
+echo "🧱 Configurando firewall..."
+sudo ufw allow 'Apache Full'
+sudo ufw --force enable
+
+# --- IP del servidor ---
+IP=$(hostname -I | awk '{print $1}')
+echo "✅ Instalación completada."
+echo "--------------------------------------------"
+echo "📍 Accede al sitio desde:"
+echo "  👉 http://$IP/wordpress"
+echo "--------------------------------------------"
+echo "Usuarios locales creados: diego, wingston, jherald, carlos (contraseña: 12345)"
+echo "Base de datos: wordpress_db"
+echo "Usuario MySQL: wpuser / Contraseña: 12345"
+echo "--------------------------------------------"
